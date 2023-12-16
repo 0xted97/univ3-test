@@ -9,7 +9,7 @@
 - WETH: 0xb4fbf271143f4fbf7b91a5ded31805e42b2208d6
 
 # Notice important
-The project currently only operates on the Goerli network. According to the Uniswapv3 documentation (https://docs.uniswap.org/contracts/v3/reference/deployments) and various explorer pages, it appears that the contracts have not been deployed on the **Arbitrum** network.
+The project currently only operates on the Goerli network. According to the Uniswapv3 documentation (https://docs.uniswap.org/contracts/v3/reference/deployments) and various explorer pages, it appears that the contracts have not been deployed on the **Arbitrum** network. 
 
 
 # Run
@@ -22,6 +22,8 @@ The project currently only operates on the Goerli network. According to the Unis
 - npx hardhat run scripts/interact.ts --network goerli 
 
 
+# Question?
+- Why does the test provide the Balancer Vault? I don't understand its role in this case.
 
 
 
