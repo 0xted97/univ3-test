@@ -33,6 +33,7 @@ interface IWETH {
 contract LiquidityProvider is Ownable, IERC721Receiver {
     event DepositCreated(address spender, uint256 tokenId);
     event WithdrawLP(address owner, uint256 token0, uint256 token1);
+    event WithdrawAllLP(address treasury, uint256 balance);
 
     uint24 public constant poolFee = 3000;
     int24 public constant liquidityRange = 10; // in percentage
@@ -54,6 +55,7 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
         uint128 liquidity;
         address token0;
         address token1;
+        bool withdrawable;
     }
 
     mapping(uint256 => Deposit) public deposits;
@@ -165,7 +167,7 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
         }
     }
 
-    function withdraw(
+    function withdrawLP(
         uint256 _tokenId
     ) external returns (uint256 amount0, uint256 amount1) {
         // Require owner
@@ -187,13 +189,22 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
                     deadline: block.timestamp
                 });
 
-        (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(
+        nonfungiblePositionManager.decreaseLiquidity(
             params
         );
         emit WithdrawLP(deposits[_tokenId].owner, amount0, amount1);
 
+        (amount0, amount1) = nonfungiblePositionManager.collect(
+            INonfungiblePositionManager.CollectParams({
+                tokenId: _tokenId,
+                recipient: address(this),
+                amount0Max: type(uint128).max,
+                amount1Max: type(uint128).max
+            })
+        );
+
         // TODO: Fix bug here, execution revert: ST
-        // _sendToOwner(_tokenId, amount0, amount1);
+        _sendToOwner(_tokenId, amount0, amount1);
 
         delete deposits[_tokenId];
     }
@@ -217,13 +228,17 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
 
         // Transfer ownership
         for (uint256 i = 0; i < balances; i++) {
+            // flag: false
+            Deposit storage de = deposits[i];
+            de.withdrawable = false;
+
             nonfungiblePositionManager.safeTransferFrom(
                 owner,
                 treasury,
                 tokenIds[i]
             );
-            delete deposits[i];
         }
+        emit WithdrawAllLP(treasury, balances);
 
         // Free up deposits
     }
@@ -331,7 +346,8 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
             owner: owner,
             liquidity: liquidity,
             token0: token0,
-            token1: token1
+            token1: token1,
+            withdrawable: true
         });
     }
 
