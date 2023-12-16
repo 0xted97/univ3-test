@@ -15,7 +15,7 @@ const DEFAULT_COMPILER_SETTINGS = {
   },
 }
 
-// 595e01874c6cbfb5dfea453c87351127facc504a4f7e87129e6820dbdb58f307
+
 const config: HardhatUserConfig = {
   solidity: {
     compilers: [DEFAULT_COMPILER_SETTINGS],
