@@ -8,7 +8,7 @@ async function main() {
 
   const depositAmount = ethers.parseEther("0.00000005");
   const lqAddresses = {
-    goerli: "0x47c794210cF4DDF6Ea381faaf9c6924d3bE32f2A",
+    goerli: "0x1bd3E7C01D16d1C7C0019Cf015BD59cAf02D7A3E",
     arbGoerli: "0x9d34940295A8313a6Af7E2c3Ee9c76bf8fB39E0B",
   } as any;
 
@@ -20,11 +20,11 @@ async function main() {
   // const withdrawETH = await liquidityProvider.withdrawETH(signer.address);
   // console.log("🚀 ~ file: interact.ts:18 ~ main ~ withdrawETH:", withdrawETH.hash)
 
-  // const tx = await liquidityProvider.deposit({
-  //   value: depositAmount,
-  // });
-  // console.log("🚀 ~ file: interact.ts:23 ~ main ~ tx:", tx.hash)
-  // await tx.wait();
+  const tx = await liquidityProvider.deposit({
+    value: depositAmount,
+  });
+  console.log("🚀 ~ file: interact.ts:23 ~ main ~ tx:", tx.hash)
+  await tx.wait();
 
 
   // Read of Position

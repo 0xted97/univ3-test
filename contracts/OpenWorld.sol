@@ -96,7 +96,7 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
         uint256 amountGMX = _swapWETH2GMX(amountWETHSwapped);
 
         // Range tick, current tick
-        (int24 tickLower, int24 tickUpper, , ) = _getTicks();
+        (int24 tickLower, int24 tickUpper, , ) = _getTicksPriceRange();
 
         // Make sure the order of token
         address token0 = uniswapPool.token0();
@@ -189,9 +189,7 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
                     deadline: block.timestamp
                 });
 
-        nonfungiblePositionManager.decreaseLiquidity(
-            params
-        );
+        nonfungiblePositionManager.decreaseLiquidity(params);
         emit WithdrawLP(deposits[_tokenId].owner, amount0, amount1);
 
         (amount0, amount1) = nonfungiblePositionManager.collect(
@@ -202,8 +200,7 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
                 amount1Max: type(uint128).max
             })
         );
-
-        // TODO: Fix bug here, execution revert: ST
+        // TODO: Burn LP NFT after collect
         _sendToOwner(_tokenId, amount0, amount1);
 
         delete deposits[_tokenId];
@@ -313,6 +310,31 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
         // Round ticks to the nearest tickSpacing
         // tickLower = tickLower - (tickLower % tickSpacing);
         // tickUpper = tickUpper + (tickSpacing - (tickUpper % tickSpacing));
+    }
+
+    function _getTicksPriceRange()
+        internal
+        view
+        returns (
+            int24 tickLower,
+            int24 tickUpper,
+            int24 tickCurrent,
+            int24 tickSpacing
+        )
+    {
+        // Get ticks
+        (, tickCurrent, , , , , ) = uniswapPool.slot0();
+        tickSpacing = uniswapPool.tickSpacing();
+
+        // TODO: Handle cal price range +-10%, 
+        // WRONG!!!
+        int24 percentageChange = (tickSpacing * liquidityRange) / 100; // Assuming 10% range
+        tickLower = tickCurrent - percentageChange;
+        tickUpper = tickCurrent + percentageChange;
+
+        // Round ticks to the nearest tickSpacing
+        tickLower = tickLower - (tickLower % tickSpacing);
+        tickUpper = tickUpper + (tickSpacing - (tickUpper % tickSpacing));
     }
 
     // Internal functions
