@@ -6,11 +6,11 @@ async function main() {
   const addresses = {
     goerli: [
       "0xBA12222222228d8Ba445958a75a0704d566BF2C8", // vault
-      "0x83ced15eaf7254474cc21f68dd095e82ee9f4f0d", // Pool ETH-LINK
+      // "0x83ced15eaf7254474cc21f68dd095e82ee9f4f0d", // Pool ETH-LINK
       "0xE592427A0AEce92De3Edee1F18E0157C05861564", // Router
-      "0xC36442b4a4522E871399CD717aBDD847Ab11FE88", // Position Manager
+      // "0xC36442b4a4522E871399CD717aBDD847Ab11FE88", // Position Manager
       "0xb4fbf271143f4fbf7b91a5ded31805e42b2208d6", // WETH
-      "0x326c977e6efc84e512bb9c30f76e30c160ed06fb", // LINK
+      "0x3Df79e0D51a20Dcafe9F2D89Ad2Af5DA4943f6e6", // GMX
     ],
     arbGoerli: [
       "0xBA12222222228d8Ba445958a75a0704d566BF2C8", // vault
@@ -26,6 +26,8 @@ async function main() {
 
   await liquidityProvider.waitForDeployment();
   console.log("🚀 ~ file: deploy.ts:18 ~ main ~ liquidityProvider:", await liquidityProvider.getAddress())
+
+  console.log("🚀 ~ file: deploy.ts:31 ~ main ~ liquidityProvider.pool():", await liquidityProvider.uniswapPool())
 
   
 }
