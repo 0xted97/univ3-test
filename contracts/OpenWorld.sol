@@ -37,6 +37,7 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
     address public WETH;
     address public GMX;
     address public balancerVault;
+    address public treasury;
 
     ISwapRouter public immutable swapRouter;
     IUniswapV3Pool public uniswapPool;
@@ -53,6 +54,8 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
     }
 
     mapping(uint256 => Deposit) public deposits;
+    mapping(address => uint256[]) public tokensOf;
+
 
     constructor(
         address _balancerVault,
@@ -119,10 +122,12 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
                     amount1Desired: amount1ToMint,
                     amount0Min: 0, // No use in production
                     amount1Min: 0, // No use in production
-                    recipient: address(this),
+                    recipient: address(this), // Transfer to smart contracts
                     deadline: block.timestamp + 600
                 })
             );
+            
+        // TODO: Emit event deposit successful
 
         // Remove allowance and refund in both assets to msg.sender
         if (amount0 < amount0ToMint) {
@@ -146,10 +151,44 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
         }
     }
 
-    function withdraw() external {}
+    function withdraw(uint256 _tokenId) external returns(uint256 amount0, uint256 amount1) {
+        // Require owner
+        // caller must be the owner of the NFT
+        require(msg.sender == deposits[_tokenId].owner, 'Not the owner');
 
-    function emergencyWithdraw() external onlyOwner {
-        // Burn all LP tokens and transfer underlying assets to the owner
+        uint128 liquidity = deposits[_tokenId].liquidity;
+
+        INonfungiblePositionManager.DecreaseLiquidityParams memory params =
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: _tokenId,
+                liquidity: liquidity,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: block.timestamp
+            });
+
+        (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
+        _sendToOwner(_tokenId, amount0, amount1);
+    }
+
+    function emergencyWithdraw(uint256 _length) external onlyOwner {
+        // TODO: Transfer all Position NFT to treasury
+        
+        address owner = address(this);
+        uint256 balances = nonfungiblePositionManager.balanceOf(owner);
+        require(_length <= balances, "Length invalid");
+
+        uint256 length = _length == 0 ? balances : _length;
+
+        for(uint256 index = 0; index < length; index++) {
+            // Get token id by owner & index
+            uint256 tokenId = nonfungiblePositionManager.tokenOfOwnerByIndex(owner, index);
+
+            // Transfer owner
+            nonfungiblePositionManager.safeTransferFrom(owner, treasury, tokenId);
+        }
+        
+        // Free up deposits
     }
 
     function withdrawETH(address payable _receiver) external {
@@ -160,16 +199,21 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
 
     // Views
 
+    function viewLP(address _user, uint256 _index) external view returns(Deposit memory) {
+        
+    }
+
     // Hooks
     receive() external payable {}
 
     function onERC721Received(
         address operator,
-        address,
+        address from,
         uint256 tokenId,
         bytes calldata
     ) external override returns (bytes4) {
         // TODO: Handle insert position LP
+        _createDeposit(operator, tokenId);
         return this.onERC721Received.selector;
     }
 
@@ -223,5 +267,34 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
         if (msg.value != 0) {
             IWETH(WETH).deposit{value: msg.value}();
         }
+    }
+
+    function _createDeposit(address owner, uint256 tokenId) internal {
+       tokensOf[owner].push(tokenId);
+
+       (, , address token0, address token1, , , , uint128 liquidity, , , , ) =
+            nonfungiblePositionManager.positions(tokenId);
+
+        // set the owner and data for position
+        // operator is msg.sender
+        deposits[tokenId] = Deposit({owner: owner, liquidity: liquidity, token0: token0, token1: token1});
+    }
+
+    function _sendToOwner(
+        uint256 tokenId,
+        uint256 amount0,
+        uint256 amount1
+    ) internal {
+        // get owner of contract
+        // address owner = deposits[tokenId].owner;
+
+        address token0 = deposits[tokenId].token0;
+        address token1 = deposits[tokenId].token1;
+        // // send collected fees to owner
+        // TransferHelper.safeTransfer(token0, owner, amount0);
+        // TransferHelper.safeTransfer(token1, owner, amount1);
+
+        TransferHelper.safeTransfer(token0, msg.sender, amount0);
+        TransferHelper.safeTransfer(token1, msg.sender, amount1);
     }
 }
