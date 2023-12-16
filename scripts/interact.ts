@@ -14,30 +14,27 @@ async function main() {
 
   const liquidityProvider = await ethers.getContractAt("LiquidityProvider", lqAddresses[networkName]);
 
-  console.log("🚀 ~ file: deploy.ts:31 ~ main ~ liquidityProvider.pool():", await liquidityProvider.uniswapPool())
-
-
-  // const withdrawETH = await liquidityProvider.withdrawETH(signer.address);
-  // console.log("🚀 ~ file: interact.ts:18 ~ main ~ withdrawETH:", withdrawETH.hash)
-
-  const tx = await liquidityProvider.deposit({
+  const txDeposit = await liquidityProvider.deposit({
     value: depositAmount,
   });
-  console.log("🚀 ~ file: interact.ts:23 ~ main ~ tx:", tx.hash)
-  await tx.wait();
+  console.log("🚀 ~ Deposit hash", txDeposit.hash);
+  await txDeposit.wait();
 
+  const txWithdrawAll = await liquidityProvider.emergencyWithdraw();
+  console.log("🚀 ~ Withdraw all hash", txWithdrawAll.hash);
+  await txWithdrawAll.wait();
+
+  
+  // const tokenId = 10000;
+  // const txWithdraw = await liquidityProvider.withdrawLP(tokenId);
+  // console.log("🚀 ~ Withdraw hash", txWithdraw.hash)
+  // await txWithdraw.wait();
 
   // Read of Position
-  const tokenId = 89137;
-  const position = await liquidityProvider.deposits(tokenId);
-  console.log("🚀 ~ file: interact.ts:35 ~ main ~ position:", position)
+  // const position = await liquidityProvider.deposits(tokenId);
 
-  // const txWithdraw = await liquidityProvider.withdrawLP(tokenId);
-  // console.log("🚀 ~ file: interact.ts:36 ~ main ~ txWithdraw:", txWithdraw.hash)
-  // await txWithdraw.wait();
-  
-  const txWithdrawAll = await liquidityProvider.emergencyWithdraw();
-  console.log("🚀 ~ file: interact.ts:38 ~ main ~ txWithdrawAll:", txWithdrawAll.hash)
+
+
 
 }
 
