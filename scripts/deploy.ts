@@ -10,7 +10,8 @@ async function main() {
       "0xE592427A0AEce92De3Edee1F18E0157C05861564", // Router
       // "0xC36442b4a4522E871399CD717aBDD847Ab11FE88", // Position Manager
       "0xb4fbf271143f4fbf7b91a5ded31805e42b2208d6", // WETH
-      "0x3Df79e0D51a20Dcafe9F2D89Ad2Af5DA4943f6e6", // GMX
+      "0xCf95d9505aa6302C9505f4deE16dA26829255795", // GMX
+      "0x9Ce85ffE6DbBa9346db5cBB9b94980633CD07ed7", // Treasury
     ],
     arbGoerli: [
       "0xBA12222222228d8Ba445958a75a0704d566BF2C8", // vault

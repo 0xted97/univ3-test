@@ -31,6 +31,9 @@ interface IWETH {
 }
 
 contract LiquidityProvider is Ownable, IERC721Receiver {
+    event DepositCreated(address spender, uint256 tokenId);
+    event WithdrawLP(address owner, uint256 token0, uint256 token1);
+
     uint24 public constant poolFee = 3000;
     int24 public constant liquidityRange = 10; // in percentage
 
@@ -56,18 +59,19 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
     mapping(uint256 => Deposit) public deposits;
     mapping(address => uint256[]) public tokensOf;
 
-
     constructor(
         address _balancerVault,
         ISwapRouter _swapRouter,
         IWETH _weth,
-        IERC20 _gmx
+        IERC20 _gmx,
+        address _treasury
     ) {
         transferOwnership(msg.sender);
         balancerVault = _balancerVault;
         swapRouter = _swapRouter;
         WETH = address(_weth);
         GMX = address(_gmx);
+        treasury = _treasury;
         uniswapPool = IUniswapV3Pool(factory.getPool(WETH, GMX, poolFee));
     }
 
@@ -84,28 +88,36 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
         require(msg.value > 0, "Invalid deposit amount");
         _transferInETH();
         // Get half amount to swap GMX
-        uint256 amountSwappedWETH = msg.value / 2;
 
         // Swap WETH -> GMX
-        uint256 amountGMX = _swapWETH2GMX(amountSwappedWETH);
+        uint256 amountWETHSwapped = msg.value / 2;
+        uint256 amountGMX = _swapWETH2GMX(amountWETHSwapped);
 
-        // // current price
+        // Range tick, current tick
         (int24 tickLower, int24 tickUpper, , ) = _getTicks();
 
-        // Cal range tick, current tick
+        // Make sure the order of token
+        address token0 = uniswapPool.token0();
+        address token1 = uniswapPool.token1();
+
+        // uint256 amountWETHRemain = msg.value - amountWETHSwapped;
 
         // amounts token
-        uint256 amount0ToMint = amountGMX;
-        uint256 amount1ToMint = msg.value - amountSwappedWETH;
+        uint256 amount0ToMint = WETH == token0
+            ? (msg.value - amountWETHSwapped)
+            : amountGMX;
+        uint256 amount1ToMint = WETH == token0
+            ? amountGMX
+            : (msg.value - amountWETHSwapped);
 
         // Approve the position manager
         TransferHelper.safeApprove(
-            GMX,
+            token0,
             address(nonfungiblePositionManager),
             amount0ToMint
         );
         TransferHelper.safeApprove(
-            WETH,
+            token1,
             address(nonfungiblePositionManager),
             amount1ToMint
         );
@@ -113,8 +125,8 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
         (tokenId, liquidity, amount0, amount1) = nonfungiblePositionManager
             .mint(
                 INonfungiblePositionManager.MintParams({
-                    token0: GMX,
-                    token1: WETH,
+                    token0: token0,
+                    token1: token1,
                     fee: poolFee,
                     tickLower: tickLower, // Set to your desired value
                     tickUpper: tickUpper, // Set to your desired value
@@ -123,71 +135,96 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
                     amount0Min: 0, // No use in production
                     amount1Min: 0, // No use in production
                     recipient: address(this), // Transfer to smart contracts
-                    deadline: block.timestamp + 600
+                    deadline: block.timestamp
                 })
             );
-            
+
         // TODO: Emit event deposit successful
+        emit DepositCreated(msg.sender, tokenId);
+        _createDeposit(msg.sender, tokenId);
 
         // Remove allowance and refund in both assets to msg.sender
         if (amount0 < amount0ToMint) {
             TransferHelper.safeApprove(
-                GMX,
+                token0,
                 address(nonfungiblePositionManager),
                 0
             );
             uint256 refund0 = amount0ToMint - amount0;
-            TransferHelper.safeTransfer(GMX, msg.sender, refund0);
+            TransferHelper.safeTransfer(token0, msg.sender, refund0);
         }
 
         if (amount1 < amount1ToMint) {
             TransferHelper.safeApprove(
-                WETH,
+                token1,
                 address(nonfungiblePositionManager),
                 0
             );
             uint256 refund1 = amount1ToMint - amount1;
-            TransferHelper.safeTransfer(WETH, msg.sender, refund1);
+            TransferHelper.safeTransfer(token1, msg.sender, refund1);
         }
     }
 
-    function withdraw(uint256 _tokenId) external returns(uint256 amount0, uint256 amount1) {
+    function withdraw(
+        uint256 _tokenId
+    ) external returns (uint256 amount0, uint256 amount1) {
         // Require owner
         // caller must be the owner of the NFT
-        require(msg.sender == deposits[_tokenId].owner, 'Not the owner');
+        require(
+            msg.sender == deposits[_tokenId].owner,
+            "Ownable: you are not the owner"
+        );
 
         uint128 liquidity = deposits[_tokenId].liquidity;
 
-        INonfungiblePositionManager.DecreaseLiquidityParams memory params =
-            INonfungiblePositionManager.DecreaseLiquidityParams({
-                tokenId: _tokenId,
-                liquidity: liquidity,
-                amount0Min: 0,
-                amount1Min: 0,
-                deadline: block.timestamp
-            });
+        INonfungiblePositionManager.DecreaseLiquidityParams
+            memory params = INonfungiblePositionManager
+                .DecreaseLiquidityParams({
+                    tokenId: _tokenId,
+                    liquidity: liquidity,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    deadline: block.timestamp
+                });
 
-        (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
-        _sendToOwner(_tokenId, amount0, amount1);
+        (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(
+            params
+        );
+        emit WithdrawLP(deposits[_tokenId].owner, amount0, amount1);
+
+        // TODO: Fix bug here, execution revert: ST
+        // _sendToOwner(_tokenId, amount0, amount1);
+
+        delete deposits[_tokenId];
     }
 
-    function emergencyWithdraw(uint256 _length) external onlyOwner {
-        // TODO: Transfer all Position NFT to treasury
-        
+    /// TODO: Optimize, DOS
+    function emergencyWithdraw() external onlyOwner {
+        // TODO: Transfer with length
+        // require(_length <= balances, "Length invalid");
+        // uint256 length = _length == 0 ? balances : _length;
+
         address owner = address(this);
         uint256 balances = nonfungiblePositionManager.balanceOf(owner);
-        require(_length <= balances, "Length invalid");
-
-        uint256 length = _length == 0 ? balances : _length;
-
-        for(uint256 index = 0; index < length; index++) {
-            // Get token id by owner & index
-            uint256 tokenId = nonfungiblePositionManager.tokenOfOwnerByIndex(owner, index);
-
-            // Transfer owner
-            nonfungiblePositionManager.safeTransferFrom(owner, treasury, tokenId);
+        // TODO: Don't work with getting and transfer together
+        uint256[] memory tokenIds = new uint256[](balances);
+        for (uint256 i = 0; i < balances; i++) {
+            tokenIds[i] = nonfungiblePositionManager.tokenOfOwnerByIndex(
+                owner,
+                i
+            );
         }
-        
+
+        // Transfer ownership
+        for (uint256 i = 0; i < balances; i++) {
+            nonfungiblePositionManager.safeTransferFrom(
+                owner,
+                treasury,
+                tokenIds[i]
+            );
+            delete deposits[i];
+        }
+
         // Free up deposits
     }
 
@@ -199,16 +236,17 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
 
     // Views
 
-    function viewLP(address _user, uint256 _index) external view returns(Deposit memory) {
-        
-    }
+    function viewLP(
+        address _user,
+        uint256 _index
+    ) external view returns (Deposit memory) {}
 
     // Hooks
     receive() external payable {}
 
     function onERC721Received(
         address operator,
-        address from,
+        address,
         uint256 tokenId,
         bytes calldata
     ) external override returns (bytes4) {
@@ -270,14 +308,31 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
     }
 
     function _createDeposit(address owner, uint256 tokenId) internal {
-       tokensOf[owner].push(tokenId);
+        tokensOf[owner].push(tokenId);
 
-       (, , address token0, address token1, , , , uint128 liquidity, , , , ) =
-            nonfungiblePositionManager.positions(tokenId);
+        (
+            ,
+            ,
+            address token0,
+            address token1,
+            ,
+            ,
+            ,
+            uint128 liquidity,
+            ,
+            ,
+            ,
+
+        ) = nonfungiblePositionManager.positions(tokenId);
 
         // set the owner and data for position
         // operator is msg.sender
-        deposits[tokenId] = Deposit({owner: owner, liquidity: liquidity, token0: token0, token1: token1});
+        deposits[tokenId] = Deposit({
+            owner: owner,
+            liquidity: liquidity,
+            token0: token0,
+            token1: token1
+        });
     }
 
     function _sendToOwner(
@@ -286,15 +341,16 @@ contract LiquidityProvider is Ownable, IERC721Receiver {
         uint256 amount1
     ) internal {
         // get owner of contract
-        // address owner = deposits[tokenId].owner;
+        address owner = deposits[tokenId].owner;
 
         address token0 = deposits[tokenId].token0;
         address token1 = deposits[tokenId].token1;
         // // send collected fees to owner
-        // TransferHelper.safeTransfer(token0, owner, amount0);
-        // TransferHelper.safeTransfer(token1, owner, amount1);
-
-        TransferHelper.safeTransfer(token0, msg.sender, amount0);
-        TransferHelper.safeTransfer(token1, msg.sender, amount1);
+        if (amount0 > 0) {
+            TransferHelper.safeTransfer(token0, owner, amount0);
+        }
+        if (amount1 > 0) {
+            TransferHelper.safeTransfer(token1, owner, amount1);
+        }
     }
 }

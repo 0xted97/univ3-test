@@ -6,9 +6,9 @@ async function main() {
   const [signer] = await ethers.getSigners();
   const networkName = hre.network.name
 
-  const depositAmount = ethers.parseEther("0.00002");
+  const depositAmount = ethers.parseEther("0.0000005");
   const lqAddresses = {
-    goerli: "0xCf2a9CB429A386F252861580E54217b53e0df66d",
+    goerli: "0xE10750bb4cD463FF2Fb6f7b675b0cc54F9EAbfc2",
     arbGoerli: "0x9d34940295A8313a6Af7E2c3Ee9c76bf8fB39E0B",
   } as any;
 
@@ -20,19 +20,24 @@ async function main() {
   // const withdrawETH = await liquidityProvider.withdrawETH(signer.address);
   // console.log("🚀 ~ file: interact.ts:18 ~ main ~ withdrawETH:", withdrawETH.hash)
 
-  const tx = await liquidityProvider.deposit({
-    value: depositAmount,
-  });
-  console.log("🚀 ~ file: interact.ts:23 ~ main ~ tx:", tx.hash)
-
-  // const tx = await liquidityProvider.withdraw(89062);
+  // const tx = await liquidityProvider.deposit({
+  //   value: depositAmount,
+  // });
   // console.log("🚀 ~ file: interact.ts:23 ~ main ~ tx:", tx.hash)
+  // await tx.wait();
 
 
   // Read of Position
-  const tokenId = 1000;
+  const tokenId = 89122;
   const position = await liquidityProvider.deposits(tokenId);
   console.log("🚀 ~ file: interact.ts:35 ~ main ~ position:", position)
+
+  // const txWithdraw = await liquidityProvider.withdraw(tokenId);
+  // console.log("🚀 ~ file: interact.ts:36 ~ main ~ txWithdraw:", txWithdraw.hash)
+  // await txWithdraw.wait();
+  
+  // const txWithdrawAll = await liquidityProvider.emergencyWithdraw();
+  // console.log("🚀 ~ file: interact.ts:38 ~ main ~ txWithdrawAll:", txWithdrawAll.hash)
 
 }
 
